@@ -24,7 +24,17 @@
   #connectBtn { background: #111; color: #fff; }
   .row { display: flex; gap: 10px; }
   .row button { font-size: 16px; padding: 14px 6px; }
-  #link { font-size: 16px; margin: 6px 0 14px; }
+  #link { font-size: 16px; margin: 6px 0 8px; }
+  #signal { font-size: 18px; margin: 0 0 14px; display: flex; align-items: flex-end; gap: 8px; }
+  #bars { display: flex; align-items: flex-end; gap: 4px; height: 30px; }
+  #bars span { width: 10px; background: #ccc; border-radius: 2px; }
+  #bars span:nth-child(1) { height: 25%; }
+  #bars span:nth-child(2) { height: 50%; }
+  #bars span:nth-child(3) { height: 75%; }
+  #bars span:nth-child(4) { height: 100%; }
+  #bars span.on { background: #111; }
+  #signal.weak #bars span.on { background: #d00000; }
+  #signal.weak #signalText { color: #d00000; font-weight: bold; }
   #state {
     border: 3px solid #999; border-radius: 16px;
     padding: 28px 8px; text-align: center;
@@ -46,6 +56,11 @@
   </div>
 
   <div id="link">状態：未接続</div>
+  <div id="signal">
+    <span>電波：</span>
+    <div id="bars"><span></span><span></span><span></span><span></span></div>
+    <span id="signalText">－</span>
+  </div>
   <div id="state">－－</div>
 
   <p class="note">
@@ -59,15 +74,28 @@ const DEVICE_NAME  = "HIKARIBAN_TENKEN_BT";
 const SERVICE_UUID = "6f1a0001-9c7d-4f6f-8a7e-000000000001";
 const CHAR_UUID    = "6f1a0002-9c7d-4f6f-8a7e-000000000002";
 
+// 電波の強さの区切り（数字が小さいほど弱い）
+const RSSI_4 = -60;   // これ以上なら4本
+const RSSI_3 = -70;   // これ以上なら3本
+const RSSI_2 = -80;   // これ以上なら2本、これ未満は1本（弱い）
+const WEAK_CLEAR = -75;        // ここまで回復したら「弱い」解除
+const WEAK_REPEAT_MS = 30000;  // 弱いままの時、何ミリ秒ごとに言い直すか
+
 const connectBtn    = document.getElementById("connectBtn");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const testBtn       = document.getElementById("testBtn");
-const linkEl  = document.getElementById("link");
-const stateEl = document.getElementById("state");
+const linkEl   = document.getElementById("link");
+const stateEl  = document.getElementById("state");
+const signalEl = document.getElementById("signal");
+const signalTextEl = document.getElementById("signalText");
+const barEls   = document.querySelectorAll("#bars span");
 
 let device = null;
 let manualDisconnect = false;
 let wakeLock = null;
+let rssiHistory = [];
+let isWeak = false;
+let lastWeakSpoken = 0;
 
 function setLink(text) { linkEl.textContent = "状態：" + text; }
 
@@ -78,6 +106,45 @@ function speak(text) {
   u.rate = 1.0;
   u.volume = 1.0;
   speechSynthesis.speak(u);
+}
+
+function clearSignal() {
+  rssiHistory = [];
+  isWeak = false;
+  signalEl.className = "";
+  signalTextEl.textContent = "－";
+  barEls.forEach(b => b.classList.remove("on"));
+}
+
+function updateSignal(rssi) {
+  // 直近3回の平均でチラつきをおさえる
+  rssiHistory.push(rssi);
+  if (rssiHistory.length > 3) rssiHistory.shift();
+  const avg = rssiHistory.reduce((a, b) => a + b, 0) / rssiHistory.length;
+
+  let bars = 1;
+  if (avg >= RSSI_4) bars = 4;
+  else if (avg >= RSSI_3) bars = 3;
+  else if (avg >= RSSI_2) bars = 2;
+
+  barEls.forEach((b, i) => b.classList.toggle("on", i < bars));
+
+  if (avg < RSSI_2) isWeak = true;
+  else if (avg >= WEAK_CLEAR) isWeak = false;
+
+  if (isWeak) {
+    signalEl.className = "weak";
+    signalTextEl.textContent = "⚠️ 弱い";
+    const now = Date.now();
+    if (now - lastWeakSpoken >= WEAK_REPEAT_MS) {
+      lastWeakSpoken = now;
+      speak("電波が弱いです");
+    }
+  } else {
+    signalEl.className = "";
+    signalTextEl.textContent = "";
+    lastWeakSpoken = 0;
+  }
 }
 
 async function keepScreenOn() {
@@ -91,6 +158,11 @@ document.addEventListener("visibilitychange", () => {
 
 function onMessage(event) {
   const text = new TextDecoder("utf-8").decode(event.target.value);
+  if (text.startsWith("RSSI:")) {
+    const rssi = parseInt(text.slice(5), 10);
+    if (!isNaN(rssi)) updateSignal(rssi);
+    return;
+  }
   if (text.includes("発報")) {
     stateEl.textContent = "発報";
     stateEl.className = "alarm";
@@ -118,6 +190,7 @@ async function openGatt() {
 
 async function onDisconnected() {
   disconnectBtn.disabled = true;
+  clearSignal();
   if (manualDisconnect) {
     setLink("未接続");
     connectBtn.disabled = false;
