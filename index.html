@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>発信機チェッカー音声機能</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    font-family: sans-serif;
+    background: #fff; color: #111;
+    max-width: 480px; margin-inline: auto;
+  }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  button {
+    width: 100%; padding: 18px;
+    font-size: 20px; font-weight: bold;
+    border: 2px solid #111; border-radius: 12px;
+    background: #fff; color: #111;
+    margin-bottom: 10px;
+  }
+  button:disabled { color: #999; border-color: #999; }
+  #connectBtn { background: #111; color: #fff; }
+  .row { display: flex; gap: 10px; }
+  .row button { font-size: 16px; padding: 14px 6px; }
+  #link { font-size: 16px; margin: 6px 0 14px; }
+  #state {
+    border: 3px solid #999; border-radius: 16px;
+    padding: 28px 8px; text-align: center;
+    font-size: 48px; font-weight: bold; color: #999;
+    margin-bottom: 14px;
+  }
+  #state.alarm   { border-color: #d00000; color: #d00000; }
+  #state.restore { border-color: #007a33; color: #007a33; }
+  .note { font-size: 14px; color: #d00000; margin-top: 16px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>発信機チェッカー音声機能</h1>
+
+  <button id="connectBtn">① 接続する</button>
+  <div class="row">
+    <button id="testBtn">🔊 音声テスト</button>
+    <button id="disconnectBtn" disabled>切断</button>
+  </div>
+
+  <div id="link">状態：未接続</div>
+  <div id="state">－－</div>
+
+  <p class="note">
+    ⚠️ 使っている間は、この画面を開いたままにしてください。<br>
+    ⚠️ Android の Chrome で開いてください。<br>
+    ⚠️ スマホの Bluetooth と位置情報を ON にしてください。
+  </p>
+
+<script>
+const DEVICE_NAME  = "HIKARIBAN_TENKEN_BT";
+const SERVICE_UUID = "6f1a0001-9c7d-4f6f-8a7e-000000000001";
+const CHAR_UUID    = "6f1a0002-9c7d-4f6f-8a7e-000000000002";
+
+const connectBtn    = document.getElementById("connectBtn");
+const disconnectBtn = document.getElementById("disconnectBtn");
+const testBtn       = document.getElementById("testBtn");
+const linkEl  = document.getElementById("link");
+const stateEl = document.getElementById("state");
+
+let device = null;
+let manualDisconnect = false;
+let wakeLock = null;
+
+function setLink(text) { linkEl.textContent = "状態：" + text; }
+
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "ja-JP";
+  u.rate = 1.0;
+  u.volume = 1.0;
+  speechSynthesis.speak(u);
+}
+
+async function keepScreenOn() {
+  try {
+    if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen");
+  } catch (e) { /* 使えない機種はそのまま */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && device && device.gatt.connected) keepScreenOn();
+});
+
+function onMessage(event) {
+  const text = new TextDecoder("utf-8").decode(event.target.value);
+  if (text.includes("発報")) {
+    stateEl.textContent = "発報";
+    stateEl.className = "alarm";
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+    speak("発報");
+  } else if (text.includes("復旧")) {
+    stateEl.textContent = "復旧";
+    stateEl.className = "restore";
+    if (navigator.vibrate) navigator.vibrate(200);
+    speak("復旧");
+  }
+}
+
+async function openGatt() {
+  const server  = await device.gatt.connect();
+  const service = await server.getPrimaryService(SERVICE_UUID);
+  const ch      = await service.getCharacteristic(CHAR_UUID);
+  await ch.startNotifications();
+  ch.addEventListener("characteristicvaluechanged", onMessage);
+  setLink("接続中 ✅");
+  connectBtn.disabled = true;
+  disconnectBtn.disabled = false;
+  keepScreenOn();
+}
+
+async function onDisconnected() {
+  disconnectBtn.disabled = true;
+  if (manualDisconnect) {
+    setLink("未接続");
+    connectBtn.disabled = false;
+    return;
+  }
+  speak("接続が切れました");
+  for (let i = 1; i <= 10; i++) {
+    setLink("再接続中…（" + i + "/10）");
+    await new Promise(r => setTimeout(r, 2000));
+    if (manualDisconnect) break;
+    try {
+      await openGatt();
+      speak("再接続しました");
+      return;
+    } catch (e) { /* もう一度 */ }
+  }
+  setLink("未接続（もう一度「接続する」を押してください）");
+  connectBtn.disabled = false;
+}
+
+connectBtn.addEventListener("click", async () => {
+  if (!navigator.bluetooth) {
+    alert("このブラウザでは Bluetooth が使えません。\nAndroid の Chrome で開いてください。");
+    return;
+  }
+  try {
+    manualDisconnect = false;
+    setLink("機器を探しています…");
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: DEVICE_NAME }, { services: [SERVICE_UUID] }],
+      optionalServices: [SERVICE_UUID]
+    });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    setLink("接続しています…");
+    await openGatt();
+    speak("接続しました");
+  } catch (e) {
+    setLink("未接続");
+    connectBtn.disabled = false;
+    if (e.name !== "NotFoundError") alert("接続できませんでした。\n" + e.message);
+  }
+});
+
+disconnectBtn.addEventListener("click", () => {
+  manualDisconnect = true;
+  if (device && device.gatt.connected) device.gatt.disconnect();
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+});
+
+testBtn.addEventListener("click", () => speak("発報"));
+</script>
+</body>
+</html>
