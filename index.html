@@ -68,6 +68,7 @@
     ⚠️ Android の Chrome で開いてください。<br>
     ⚠️ スマホの Bluetooth と位置情報を ON にしてください。
   </p>
+  <p id="offline" style="font-size:14px; color:#555; margin-top:10px;">圏外対応：準備中…</p>
 
 <script>
 const DEVICE_NAME  = "HIKARIBAN_TENKEN_BT";
@@ -241,6 +242,21 @@ disconnectBtn.addEventListener("click", () => {
 });
 
 testBtn.addEventListener("click", () => speak("発報"));
+
+// ---- 圏外でも開けるようにする仕組み ----
+const offlineEl = document.getElementById("offline");
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(() => {
+    offlineEl.textContent = "✅ 圏外対応：準備OK（電波がなくても開けます）";
+    offlineEl.style.color = "#007a33";
+  }).catch(() => {
+    offlineEl.textContent = "⚠️ 圏外対応：準備できませんでした（開く時にネットが必要です）";
+    offlineEl.style.color = "#d00000";
+  });
+} else {
+  offlineEl.textContent = "⚠️ 圏外対応：このブラウザでは使えません";
+  offlineEl.style.color = "#d00000";
+}
 </script>
 </body>
 </html>
