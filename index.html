@@ -61,6 +61,7 @@
     <div id="bars"><span></span><span></span><span></span><span></span></div>
     <span id="signalText">－</span>
   </div>
+  <div id="mode" style="font-size:15px; margin:-6px 0 14px; color:#555;">通信：－</div>
   <div id="state">－－</div>
 
   <p class="note">
@@ -76,10 +77,12 @@ const SERVICE_UUID = "6f1a0001-9c7d-4f6f-8a7e-000000000001";
 const CHAR_UUID    = "6f1a0002-9c7d-4f6f-8a7e-000000000002";
 
 // 電波の強さの区切り（数字が小さいほど弱い）
-const RSSI_4 = -60;   // これ以上なら4本
-const RSSI_3 = -70;   // これ以上なら3本
-const RSSI_2 = -80;   // これ以上なら2本、これ未満は1本（弱い）
-const WEAK_CLEAR = -75;        // ここまで回復したら「弱い」解除
+// 通常モードの区切り（長距離モードの時は、さらに8下げる）
+const RSSI_4_BASE = -60;   // これ以上なら4本
+const RSSI_3_BASE = -70;   // これ以上なら3本
+const RSSI_2_BASE = -80;   // これ以上なら2本、これ未満は1本（弱い）
+const WEAK_CLEAR_BASE = -75;   // ここまで回復したら「弱い」解除
+const CODED_SHIFT = 8;
 const WEAK_REPEAT_MS = 30000;  // 弱いままの時、何ミリ秒ごとに言い直すか
 
 const connectBtn    = document.getElementById("connectBtn");
@@ -97,6 +100,8 @@ let wakeLock = null;
 let rssiHistory = [];
 let isWeak = false;
 let lastWeakSpoken = 0;
+let currentPhy = 0;
+const modeEl = document.getElementById("mode");
 
 function setLink(text) { linkEl.textContent = "状態：" + text; }
 
@@ -110,6 +115,8 @@ function speak(text) {
 }
 
 function clearSignal() {
+  currentPhy = 0;
+  if (typeof modeEl !== "undefined" && modeEl) modeEl.textContent = "通信：－";
   rssiHistory = [];
   isWeak = false;
   signalEl.className = "";
@@ -123,6 +130,8 @@ function updateSignal(rssi) {
   if (rssiHistory.length > 3) rssiHistory.shift();
   const avg = rssiHistory.reduce((a, b) => a + b, 0) / rssiHistory.length;
 
+  const sh = (currentPhy === 3) ? CODED_SHIFT : 0;
+  const RSSI_4 = RSSI_4_BASE - sh, RSSI_3 = RSSI_3_BASE - sh, RSSI_2 = RSSI_2_BASE - sh, WEAK_CLEAR = WEAK_CLEAR_BASE - sh;
   let bars = 1;
   if (avg >= RSSI_4) bars = 4;
   else if (avg >= RSSI_3) bars = 3;
@@ -159,6 +168,13 @@ document.addEventListener("visibilitychange", () => {
 
 function onMessage(event) {
   const text = new TextDecoder("utf-8").decode(event.target.value);
+  if (text.startsWith("PHY:")) {
+    const phy = parseInt(text.slice(4), 10);
+    if (phy === 3 && currentPhy !== 3) speak("長距離モードになりました");
+    currentPhy = phy;
+    modeEl.textContent = "通信：" + (phy === 3 ? "長距離モード ✅" : phy === 2 ? "高速モード" : "通常モード");
+    return;
+  }
   if (text.startsWith("RSSI:")) {
     const rssi = parseInt(text.slice(5), 10);
     if (!isNaN(rssi)) updateSignal(rssi);
