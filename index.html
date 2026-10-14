@@ -22,6 +22,7 @@
   }
   button:disabled { color: #999; border-color: #999; }
   #connectBtn { background: #111; color: #fff; }
+  #connectBtn:disabled { background: #fff; }
   .row { display: flex; gap: 10px; }
   .row button { font-size: 16px; padding: 14px 6px; }
   #link { font-size: 16px; margin: 6px 0 8px; }
@@ -44,6 +45,56 @@
   #state.alarm   { border-color: #d00000; color: #d00000; }
   #state.restore { border-color: #007a33; color: #007a33; }
   .note { font-size: 14px; color: #d00000; margin-top: 16px; line-height: 1.6; }
+
+  /* ---- モード切り替え ---- */
+  .tabs { display: flex; gap: 0; margin-bottom: 14px; }
+  .tabs button {
+    margin: 0; border-radius: 0; font-size: 17px; padding: 12px 4px;
+    color: #777; border-color: #999;
+  }
+  .tabs button:first-child { border-radius: 12px 0 0 12px; }
+  .tabs button:last-child  { border-radius: 0 12px 12px 0; border-left: none; }
+  .tabs button.on { background: #111; color: #fff; border-color: #111; }
+  .sub { margin: 0 0 12px; }
+  .sub button { font-size: 16px; padding: 10px 4px; }
+
+  /* ---- 空気管モード ---- */
+  .lbl { font-size: 15px; margin: 4px 0 6px; }
+  #serial {
+    width: 100%; font-size: 34px; font-weight: bold; text-align: center;
+    padding: 10px; border: 2px solid #111; border-radius: 12px;
+    letter-spacing: .3em; margin-bottom: 10px;
+  }
+  #serial:disabled { color: #555; border-color: #999; background: #fff; }
+  #jdg button.on { background: #111; color: #fff; }
+  #dState {
+    border: 3px solid #999; border-radius: 16px;
+    padding: 14px 8px; text-align: center; margin-bottom: 12px;
+  }
+  #dLabel { font-size: 26px; font-weight: bold; color: #999; }
+  #dTime  { font-size: 54px; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  #dSub   { font-size: 16px; color: #333; min-height: 1.4em; }
+  #dState.wait    { border-color: #111; }
+  #dState.wait #dLabel { color: #111; }
+  #dState.alarm   { border-color: #d00000; }
+  #dState.alarm #dLabel, #dState.alarm #dTime { color: #d00000; }
+  #dState.check   { border-color: #b36b00; }
+  #dState.check #dLabel { color: #b36b00; }
+  #dState.done    { border-color: #007a33; }
+  #dState.done #dLabel { color: #007a33; }
+  #startBtn { background: #111; color: #fff; font-size: 24px; }
+  #startBtn:disabled { background: #fff; }
+  #warn { color: #d00000; font-size: 15px; font-weight: bold; min-height: 1.2em; margin: 0 0 8px; }
+  #resetBtn { color: #d00000; border-color: #d00000; font-size: 16px; padding: 12px; margin-top: 18px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 18px; margin-bottom: 14px; }
+  th, td { border-bottom: 1px solid #ccc; padding: 10px 4px; text-align: right; }
+  th { font-size: 14px; color: #555; font-weight: normal; border-bottom: 2px solid #111; }
+  th:nth-child(2), td:nth-child(2) { text-align: center; }
+  td { font-variant-numeric: tabular-nums; }
+  #empty { text-align: center; color: #777; padding: 24px 0; }
+  #copyMsg { color: #007a33; font-weight: bold; min-height: 1.2em; text-align: center; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -62,7 +113,57 @@
     <span id="signalText">－</span>
   </div>
   <div id="mode" style="font-size:15px; margin:-6px 0 14px; color:#555;">通信：－</div>
-  <div id="state">－－</div>
+
+  <div class="tabs">
+    <button id="tabHassin">発信機モード</button>
+    <button id="tabKanchi">空気管モード</button>
+  </div>
+
+  <!-- ===== 発信機モード ===== -->
+  <section id="viewHassin">
+    <div id="state">－－</div>
+  </section>
+
+  <!-- ===== 空気管モード ===== -->
+  <section id="viewKanchi" class="hidden">
+    <div class="row sub">
+      <button id="subMeasure">⏱️ 測る</button>
+      <button id="subList">📋 一覧（<span id="cnt">0</span>件）</button>
+    </div>
+
+    <div id="paneMeasure">
+      <div class="lbl">製造番号（下3桁）</div>
+      <input id="serial" type="text" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="000">
+
+      <div class="lbl">復旧の判定（点灯が続いたら復旧）</div>
+      <div class="row" id="jdg">
+        <button data-sec="3">3秒</button>
+        <button data-sec="5">5秒</button>
+      </div>
+
+      <div id="dState">
+        <div id="dLabel">番号を入れてスタート</div>
+        <div id="dTime">0</div>
+        <div id="dSub"></div>
+      </div>
+
+      <div id="warn"></div>
+      <button id="startBtn" disabled>▶ スタート</button>
+      <button id="stopBtn" class="hidden">■ 中止（記録しない）</button>
+
+      <button id="resetBtn">🗑️ リセット（全部消してNo.1から）</button>
+    </div>
+
+    <div id="paneList" class="hidden">
+      <table>
+        <thead><tr><th>No.</th><th>製造番号</th><th>発報まで</th><th>継続</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="empty">まだ記録がありません</div>
+      <button id="copyBtn">📄 一覧をコピー</button>
+      <div id="copyMsg"></div>
+    </div>
+  </section>
 
   <p class="note">
     ⚠️ 使っている間は、この画面を開いたままにしてください。<br>
@@ -103,7 +204,16 @@ let lastWeakSpoken = 0;
 let currentPhy = 0;
 const modeEl = document.getElementById("mode");
 
+// スマホに覚えさせる（電源を切っても残る）
+function load(key, def) {
+  try { const v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch (e) { return def; }
+}
+function save(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* 保存できない時はそのまま */ }
+}
+
 function setLink(text) { linkEl.textContent = "状態：" + text; }
+function isConnected() { return !!(device && device.gatt && device.gatt.connected); }
 
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
@@ -163,11 +273,249 @@ async function keepScreenOn() {
   } catch (e) { /* 使えない機種はそのまま */ }
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && device && device.gatt.connected) keepScreenOn();
+  if (document.visibilityState === "visible" && isConnected()) keepScreenOn();
 });
 
-function onMessage(event) {
-  const text = new TextDecoder("utf-8").decode(event.target.value);
+// =====================================================================
+//  モード切り替え
+// =====================================================================
+let appMode = load("appMode", "hassin");   // "hassin" or "kanchi"
+const tabHassin = document.getElementById("tabHassin");
+const tabKanchi = document.getElementById("tabKanchi");
+const viewHassin = document.getElementById("viewHassin");
+const viewKanchi = document.getElementById("viewKanchi");
+
+function setMode(m) {
+  if (m === "hassin" && d.phase !== "idle") {
+    if (!confirm("測っている途中です。中止して発信機モードにしますか？")) return;
+    stopMeasure();
+  }
+  appMode = m; save("appMode", m);
+  tabHassin.classList.toggle("on", m === "hassin");
+  tabKanchi.classList.toggle("on", m === "kanchi");
+  viewHassin.classList.toggle("hidden", m !== "hassin");
+  viewKanchi.classList.toggle("hidden", m !== "kanchi");
+}
+tabHassin.addEventListener("click", () => setMode("hassin"));
+tabKanchi.addEventListener("click", () => setMode("kanchi"));
+
+// =====================================================================
+//  空気管モード（ストップウォッチ）
+//    チェッカーのLEDが消える＝「発報」、点く＝「復旧」が届く
+//    点灯が「判定秒数」続いたら復旧確定。その間にまた消えたら発報継続
+// =====================================================================
+const serialEl = document.getElementById("serial");
+const startBtn = document.getElementById("startBtn");
+const stopBtn  = document.getElementById("stopBtn");
+const resetBtn = document.getElementById("resetBtn");
+const warnEl   = document.getElementById("warn");
+const dStateEl = document.getElementById("dState");
+const dLabelEl = document.getElementById("dLabel");
+const dTimeEl  = document.getElementById("dTime");
+const dSubEl   = document.getElementById("dSub");
+const jdgBtns  = document.querySelectorAll("#jdg button");
+const tbodyEl  = document.getElementById("tbody");
+const emptyEl  = document.getElementById("empty");
+const cntEl    = document.getElementById("cnt");
+
+let judgeSec = load("judgeSec", 3);
+let records  = load("records", []);   // {no, serial, alarm, dur}
+let lastLed  = null;                  // チェッカーから最後に届いた状態 "発報" / "復旧"
+
+// phase: idle（待機） / wait（発報待ち） / alarm（発報中） / check（復旧確認中）
+const d = { phase: "idle", serial: "", t0: 0, tAlarm: 0, tRestore: 0, timer: null };
+let tick = null;
+
+const sec = (ms) => Math.round(ms / 1000);
+
+function setJudge(s) {
+  judgeSec = s; save("judgeSec", s);
+  jdgBtns.forEach(b => b.classList.toggle("on", Number(b.dataset.sec) === s));
+}
+jdgBtns.forEach(b => b.addEventListener("click", () => setJudge(Number(b.dataset.sec))));
+
+function serialOk() { return /^\d{3}$/.test(serialEl.value); }
+
+function refreshButtons() {
+  const idle = d.phase === "idle";
+  startBtn.classList.toggle("hidden", !idle);
+  stopBtn.classList.toggle("hidden", idle);
+  serialEl.disabled = !idle;
+  jdgBtns.forEach(b => b.disabled = !idle);
+  resetBtn.disabled = !idle;
+  startBtn.disabled = !(idle && serialOk() && isConnected());
+  if (idle) {
+    if (!isConnected()) warnEl.textContent = "⚠️ 先に「① 接続する」を押してください";
+    else if (serialEl.value && !serialOk()) warnEl.textContent = "⚠️ 製造番号は3桁で入れてください";
+    else if (lastLed === "発報") warnEl.textContent = "⚠️ チェッカーのLEDが消えています（端子を確認）";
+    else warnEl.textContent = "";
+  }
+}
+
+serialEl.addEventListener("input", () => {
+  serialEl.value = serialEl.value.replace(/\D/g, "").slice(0, 3);
+  refreshButtons();
+});
+
+function showState(cls, label, timeMs, sub) {
+  dStateEl.className = cls;
+  dLabelEl.textContent = label;
+  dTimeEl.textContent = timeMs === null ? "－" : sec(timeMs) + "秒";
+  dSubEl.textContent = sub || "";
+}
+
+function render() {
+  const now = Date.now();
+  if (d.phase === "wait") {
+    showState("wait", "No." + (records.length + 1) + "　" + d.serial + "　発報待ち…", now - d.t0, "スタートからの時間");
+  } else if (d.phase === "alarm") {
+    showState("alarm", "🔥 発報中", now - d.tAlarm, "発報まで " + sec(d.tAlarm - d.t0) + "秒");
+  } else if (d.phase === "check") {
+    const left = Math.max(0, Math.ceil((d.tRestore + judgeSec * 1000 - now) / 1000));
+    showState("check", "復旧確認中…（あと" + left + "秒）", d.tRestore - d.tAlarm, "発報まで " + sec(d.tAlarm - d.t0) + "秒");
+  }
+}
+
+// スタートボタン → 「3、2、1、スタート」の声に合わせてから計測開始
+const COUNT_STEP_MS = 1000;   // 数字と数字の間（1秒）
+let cdTimers = [];
+
+function showCount(n) {
+  dStateEl.className = "wait";
+  dLabelEl.textContent = "No." + (records.length + 1) + "　" + d.serial + "　用意…";
+  dTimeEl.textContent = n;
+  dSubEl.textContent = "「スタート」で注入してください";
+}
+
+function startCountdown() {
+  if (!serialOk() || !isConnected()) return;
+  d.phase = "count"; d.serial = serialEl.value;
+  refreshButtons();
+  warnEl.textContent = lastLed === "発報" ? "⚠️ LEDが消えています（そのまま測ります）" : "";
+  if ("speechSynthesis" in window) speechSynthesis.cancel();   // 前の読み上げが残っていたら止める
+  [3, 2, 1].forEach((n, i) => {
+    cdTimers.push(setTimeout(() => {
+      showCount(n); speak(String(n));
+      if (navigator.vibrate) navigator.vibrate(60);
+    }, i * COUNT_STEP_MS));
+  });
+  cdTimers.push(setTimeout(startMeasure, 3 * COUNT_STEP_MS));
+}
+
+function startMeasure() {
+  cdTimers = [];
+  d.phase = "wait"; d.t0 = Date.now();   // 「スタート」の瞬間から計測
+  speak("スタート");
+  if (navigator.vibrate) navigator.vibrate(250);
+  tick = setInterval(render, 200);
+  render(); refreshButtons();
+}
+
+function stopMeasure() {
+  cdTimers.forEach(clearTimeout); cdTimers = [];
+  clearInterval(tick); tick = null;
+  clearTimeout(d.timer); d.timer = null;
+  d.phase = "idle";
+  showState("", "番号を入れてスタート", null, "");
+  refreshButtons();
+}
+
+function finishMeasure() {
+  // 点灯が判定秒数続いた → 点いた時刻にさかのぼって復旧確定
+  const rec = { no: records.length + 1, serial: d.serial, alarm: sec(d.tAlarm - d.t0), dur: sec(d.tRestore - d.tAlarm) };
+  records.push(rec); save("records", records);
+  clearInterval(tick); tick = null; d.timer = null;
+  d.phase = "idle";
+  showState("done", "✅ No." + rec.no + "　" + rec.serial + "　記録しました",
+            null, "発報まで " + rec.alarm + "秒 ／ 継続 " + rec.dur + "秒");
+  dTimeEl.textContent = rec.dur + "秒";
+  speak("復旧");
+  if (navigator.vibrate) navigator.vibrate(200);
+  serialEl.value = "";
+  renderList(); refreshButtons();
+}
+
+// チェッカーから「発報」「復旧」が届いた時（空気管モード）
+function kanchiEvent(kind) {
+  const now = Date.now();
+  if (d.phase === "wait" && kind === "発報") {
+    d.phase = "alarm"; d.tAlarm = now;
+    speak("発報");
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+  } else if (d.phase === "alarm" && kind === "復旧") {
+    d.phase = "check"; d.tRestore = now;
+    d.timer = setTimeout(finishMeasure, judgeSec * 1000);
+  } else if (d.phase === "check" && kind === "発報") {
+    // 判定時間内にまた消えた → 一瞬の点灯なので発報継続
+    clearTimeout(d.timer); d.timer = null;
+    d.phase = "alarm";
+  }
+  render();
+}
+
+startBtn.addEventListener("click", startCountdown);
+stopBtn.addEventListener("click", () => {
+  if (confirm("中止しますか？（この回は記録しません）")) stopMeasure();
+});
+resetBtn.addEventListener("click", () => {
+  if (!confirm("本当に全部消しますか？\n（一覧の記録も全部消えて、No.1からになります）")) return;
+  records = []; save("records", records);
+  serialEl.value = "";
+  stopMeasure(); renderList();
+});
+
+// ---- 一覧 ----
+const subMeasure = document.getElementById("subMeasure");
+const subList    = document.getElementById("subList");
+const paneMeasure = document.getElementById("paneMeasure");
+const paneList    = document.getElementById("paneList");
+function setSub(which) {
+  paneMeasure.classList.toggle("hidden", which !== "measure");
+  paneList.classList.toggle("hidden", which !== "list");
+  subMeasure.classList.toggle("on", which === "measure");
+  subList.classList.toggle("on", which === "list");
+  subMeasure.style.background = which === "measure" ? "#111" : "#fff";
+  subMeasure.style.color      = which === "measure" ? "#fff" : "#111";
+  subList.style.background    = which === "list" ? "#111" : "#fff";
+  subList.style.color         = which === "list" ? "#fff" : "#111";
+}
+subMeasure.addEventListener("click", () => setSub("measure"));
+subList.addEventListener("click", () => setSub("list"));
+
+function renderList() {
+  tbodyEl.innerHTML = "";
+  records.forEach(r => {
+    const tr = document.createElement("tr");
+    [r.no, r.serial, r.alarm + "秒", r.dur + "秒"].forEach(v => {
+      const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+    });
+    tbodyEl.appendChild(tr);
+  });
+  emptyEl.classList.toggle("hidden", records.length > 0);
+  cntEl.textContent = records.length;
+}
+
+function listText() {
+  return records.map(r => "No." + r.no + "　" + r.serial + "　発報 " + r.alarm + "秒　継続 " + r.dur + "秒").join("\n");
+}
+const copyMsg = document.getElementById("copyMsg");
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  if (!records.length) { copyMsg.textContent = ""; return; }
+  const text = listText();
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+    ta.select(); try { ok = document.execCommand("copy"); } catch (e2) {} ta.remove();
+  }
+  copyMsg.style.color = ok ? "#007a33" : "#d00000";
+  copyMsg.textContent = ok ? "✅ コピーしました。LINEに貼り付けてください" : "⚠️ コピーできませんでした";
+  setTimeout(() => copyMsg.textContent = "", 4000);
+});
+
+// =====================================================================
+//  チェッカーから届いた文字
+// =====================================================================
+function handleText(text) {
   if (text.startsWith("PHY:")) {
     const phy = parseInt(text.slice(4), 10);
     if (phy === 3 && currentPhy !== 3) speak("長距離モードになりました");
@@ -180,17 +528,32 @@ function onMessage(event) {
     if (!isNaN(rssi)) updateSignal(rssi);
     return;
   }
-  if (text.includes("発報")) {
-    stateEl.textContent = "発報";
-    stateEl.className = "alarm";
+  let kind = null;
+  if (text.includes("発報")) kind = "発報";
+  else if (text.includes("復旧")) kind = "復旧";
+  if (!kind) return;
+  lastLed = kind;
+
+  // 発信機モードの表示（いつも更新しておく）
+  stateEl.textContent = kind;
+  stateEl.className = kind === "発報" ? "alarm" : "restore";
+
+  if (appMode === "kanchi") {
+    kanchiEvent(kind);
+    if (d.phase === "idle") refreshButtons();
+    return;
+  }
+  if (kind === "発報") {
     if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
     speak("発報");
-  } else if (text.includes("復旧")) {
-    stateEl.textContent = "復旧";
-    stateEl.className = "restore";
+  } else {
     if (navigator.vibrate) navigator.vibrate(200);
     speak("復旧");
   }
+}
+
+function onMessage(event) {
+  handleText(new TextDecoder("utf-8").decode(event.target.value));
 }
 
 async function openGatt() {
@@ -203,11 +566,14 @@ async function openGatt() {
   connectBtn.disabled = true;
   disconnectBtn.disabled = false;
   keepScreenOn();
+  refreshButtons();
 }
 
 async function onDisconnected() {
   disconnectBtn.disabled = true;
   clearSignal();
+  lastLed = null;
+  refreshButtons();
   if (manualDisconnect) {
     setLink("未接続");
     connectBtn.disabled = false;
@@ -253,11 +619,18 @@ connectBtn.addEventListener("click", async () => {
 
 disconnectBtn.addEventListener("click", () => {
   manualDisconnect = true;
-  if (device && device.gatt.connected) device.gatt.disconnect();
+  if (isConnected()) device.gatt.disconnect();
   if (wakeLock) { wakeLock.release(); wakeLock = null; }
 });
 
 testBtn.addEventListener("click", () => speak("発報"));
+
+// ---- 最初の表示 ----
+setJudge(judgeSec === 5 ? 5 : 3);
+setSub("measure");
+renderList();
+stopMeasure();
+setMode(appMode === "kanchi" ? "kanchi" : "hassin");
 
 // ---- 圏外でも開けるようにする仕組み ----
 const offlineEl = document.getElementById("offline");

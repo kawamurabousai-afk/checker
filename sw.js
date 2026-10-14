@@ -1,5 +1,5 @@
 // 発信機チェッカー：圏外でもページを開けるようにする
-const CACHE = "checker-v1";
+const CACHE = "checker-v2";
 const FILES = ["./", "./index.html"];
 
 self.addEventListener("install", (e) => {
