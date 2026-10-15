@@ -584,6 +584,20 @@ function handleText(text) {
     if (!isNaN(rssi)) updateSignal(rssi);
     return;
   }
+  // 今のLEDの状態（チェッカーが定期的に送ってくる。読み上げはしない）
+  if (text.startsWith("LED:")) {
+    const off = text.slice(4).trim() === "OFF";
+    // 測っている途中は「発報」「復旧」の合図だけで判断する
+    if (d.phase === "idle") {
+      lastLed = off ? "発報" : "復旧";
+      if (appMode === "kanchi") refreshButtons(); else updateLedAlert();
+      if (!stateEl.className) {   // 発信機モードの表示がまだ「－－」なら今の状態を出す
+        stateEl.textContent = off ? "発報" : "復旧";
+        stateEl.className = off ? "alarm" : "restore";
+      }
+    }
+    return;
+  }
   let kind = null;
   if (text.includes("発報")) kind = "発報";
   else if (text.includes("復旧")) kind = "復旧";
