@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>発信機チェッカー音声機能</title>
+<title>音声チェッカー</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -47,16 +47,27 @@
   .note { font-size: 14px; color: #d00000; margin-top: 16px; line-height: 1.6; }
 
   /* ---- モード切り替え ---- */
-  .tabs { display: flex; gap: 0; margin-bottom: 14px; }
+  /* フォルダの見出しタブ（押した方が手前に出る） */
+  :root { --red: #d00000; --red-pale: #fde3e3; --blue: #0057c2; --blue-pale: #dde9fb; }
+  .tabs { display: flex; gap: 6px; align-items: flex-end; padding: 0 6px; position: relative; z-index: 1; }
   .tabs button {
-    margin: 0; border-radius: 0; font-size: 17px; padding: 12px 4px;
-    color: #777; border-color: #999;
+    margin: 0 0 -3px; width: 50%;
+    border-width: 3px; border-style: solid; border-radius: 14px 14px 0 0;
+    font-size: 17px; padding: 10px 4px 12px;
   }
-  .tabs button:first-child { border-radius: 12px 0 0 12px; }
-  .tabs button:last-child  { border-radius: 0 12px 12px 0; border-left: none; }
-  .tabs button.on { background: #111; color: #fff; border-color: #111; }
+  #tabHassin { color: var(--red);  border-color: var(--red);  background: var(--red-pale); }
+  #tabKanchi { color: var(--blue); border-color: var(--blue); background: var(--blue-pale); }
+  .tabs button:not(.on) { padding: 7px 4px 8px; opacity: .75; border-bottom-color: transparent; }
+  #tabHassin.on { background: var(--red);  color: #fff; font-size: 19px; }
+  #tabKanchi.on { background: var(--blue); color: #fff; font-size: 19px; }
+  #panel {
+    border: 3px solid var(--red); border-radius: 0 0 16px 16px;
+    border-top-width: 8px; padding: 14px 10px 6px; margin-bottom: 8px;
+  }
+  #panel.kanchi { border-color: var(--blue); }
+  #panel #state { margin-bottom: 8px; }
   .sub { margin: 0 0 12px; }
-  .sub button { font-size: 16px; padding: 10px 4px; }
+  .sub button { font-size: 16px; padding: 10px 4px; border-color: #0057c2; }
 
   /* ---- 空気管モード ---- */
   .lbl { font-size: 15px; margin: 4px 0 6px; }
@@ -82,8 +93,9 @@
   #dState.check #dLabel { color: #b36b00; }
   #dState.done    { border-color: #007a33; }
   #dState.done #dLabel { color: #007a33; }
-  #startBtn { background: #111; color: #fff; font-size: 24px; }
-  #startBtn:disabled { background: #fff; }
+  #startBtn { background: var(--blue); border-color: var(--blue); color: #fff; font-size: 24px; }
+  #startBtn:disabled { background: #d6d6d6; border-color: #d6d6d6; color: #888; }
+  #jdg button.on { background: var(--blue); border-color: var(--blue); }
   #warn { color: #d00000; font-size: 15px; font-weight: bold; min-height: 1.2em; margin: 0 0 8px; }
   #resetBtn { color: #d00000; border-color: #d00000; font-size: 16px; padding: 12px; margin-top: 18px; }
 
@@ -98,7 +110,7 @@
 </style>
 </head>
 <body>
-  <h1>発信機チェッカー音声機能</h1>
+  <h1>音声チェッカー</h1>
 
   <button id="connectBtn">① 接続する</button>
   <div class="row">
@@ -119,6 +131,7 @@
     <button id="tabKanchi">空気管モード</button>
   </div>
 
+  <div id="panel">
   <!-- ===== 発信機モード ===== -->
   <section id="viewHassin">
     <div id="state">－－</div>
@@ -164,6 +177,8 @@
       <div id="copyMsg"></div>
     </div>
   </section>
+
+  </div>
 
   <p class="note">
     ⚠️ 使っている間は、この画面を開いたままにしてください。<br>
@@ -295,6 +310,7 @@ function setMode(m) {
   tabKanchi.classList.toggle("on", m === "kanchi");
   viewHassin.classList.toggle("hidden", m !== "hassin");
   viewKanchi.classList.toggle("hidden", m !== "kanchi");
+  document.getElementById("panel").classList.toggle("kanchi", m === "kanchi");
 }
 tabHassin.addEventListener("click", () => setMode("hassin"));
 tabKanchi.addEventListener("click", () => setMode("kanchi"));
@@ -474,9 +490,9 @@ function setSub(which) {
   paneList.classList.toggle("hidden", which !== "list");
   subMeasure.classList.toggle("on", which === "measure");
   subList.classList.toggle("on", which === "list");
-  subMeasure.style.background = which === "measure" ? "#111" : "#fff";
+  subMeasure.style.background = which === "measure" ? "#0057c2" : "#fff";
   subMeasure.style.color      = which === "measure" ? "#fff" : "#111";
-  subList.style.background    = which === "list" ? "#111" : "#fff";
+  subList.style.background    = which === "list" ? "#0057c2" : "#fff";
   subList.style.color         = which === "list" ? "#fff" : "#111";
 }
 subMeasure.addEventListener("click", () => setSub("measure"));
