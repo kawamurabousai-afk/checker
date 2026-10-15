@@ -380,8 +380,10 @@ function serialOk() { return /^\d{3}$/.test(serialEl.value); }
 
 // LEDが消えている時の大きなお知らせ（空気管モードで、測っていない時だけ）
 const ledAlertEl = document.getElementById("ledAlert");
+let ledAlertOn = false;   // スタートを押した時にLEDが消えていたら true
 function updateLedAlert() {
-  const show = appMode === "kanchi" && d.phase === "idle" && isConnected() && lastLed === "発報";
+  if (lastLed !== "発報" || appMode !== "kanchi" || !isConnected()) ledAlertOn = false;
+  const show = ledAlertOn && d.phase === "idle";
   ledAlertEl.classList.toggle("hidden", !show);
 }
 
@@ -397,7 +399,6 @@ function refreshButtons() {
   if (idle) {
     if (!isConnected()) warnEl.textContent = "⚠️ 先に「① 接続する」を押してください";
     else if (serialEl.value && !serialOk()) warnEl.textContent = "⚠️ 製造番号は3桁で入れてください";
-    else if (lastLed === "発報") warnEl.textContent = "⚠️ チェッカーのLEDが消えています（端子を確認）";
     else warnEl.textContent = "";
   }
 }
@@ -439,9 +440,14 @@ function showCount(n) {
 
 function startCountdown() {
   if (!serialOk() || !isConnected()) return;
+  if (lastLed === "発報") {   // LEDが消えている → スタートしないで大きくお知らせ
+    ledAlertOn = true; updateLedAlert();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    return;
+  }
   d.phase = "count"; d.serial = serialEl.value;
   refreshButtons();
-  warnEl.textContent = lastLed === "発報" ? "⚠️ LEDが消えています（そのまま測ります）" : "";
+  warnEl.textContent = "";
   if ("speechSynthesis" in window) speechSynthesis.cancel();   // 前の読み上げが残っていたら止める
   [3, 2, 1].forEach((n, i) => {
     cdTimers.push(setTimeout(() => {
