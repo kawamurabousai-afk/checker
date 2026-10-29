@@ -142,7 +142,8 @@
     <div id="bars"><span></span><span></span><span></span><span></span></div>
     <span id="signalText">－</span>
   </div>
-  <div id="mode" style="font-size:15px; margin:-6px 0 14px; color:#555;">通信：－</div>
+  <div id="mode" style="font-size:15px; margin:-6px 0 4px; color:#555;">通信：－</div>
+  <div id="bat" style="font-size:17px; margin:0 0 14px;">🔋 電池：－</div>
 
   <div class="tabs">
     <button id="tabHassin">発信機モード</button>
@@ -243,6 +244,70 @@ let isWeak = false;
 let lastWeakSpoken = 0;
 let currentPhy = 0;
 const modeEl = document.getElementById("mode");
+const batEl  = document.getElementById("bat");
+
+// ---- 電池残量 ----
+// 電池の電圧(V) → 残量(%) のめやす表（リポ電池1本）
+const BAT_TABLE = [[4.20,100],[4.10,90],[4.00,80],[3.92,70],[3.85,60],[3.80,50],
+                   [3.75,40],[3.71,30],[3.67,20],[3.61,10],[3.50,5],[3.30,0]];
+const BAT_LOW  = 20;   // これ以下で「少なくなりました」
+const BAT_EMPTY = 10;  // これ以下で「充電してください」（くり返し）
+let batHistory = [];
+let batSpokenFirst = false;
+let batLowSpoken = false;
+let batEmptySpoken = 0;
+
+function voltToPercent(v) {
+  if (v >= BAT_TABLE[0][0]) return 100;
+  for (let i = 1; i < BAT_TABLE.length; i++) {
+    const [v1, p1] = BAT_TABLE[i - 1], [v2, p2] = BAT_TABLE[i];
+    if (v >= v2) return Math.round(p2 + (p1 - p2) * (v - v2) / (v1 - v2));
+  }
+  return 0;
+}
+
+function clearBattery() {
+  batHistory = [];
+  batSpokenFirst = false;
+  batEl.style.color = "";
+  batEl.style.fontWeight = "";
+  batEl.textContent = "🔋 電池：－";
+}
+
+function updateBattery(mv) {
+  if (mv < 2500) {           // 線が外れている等で正しく測れない
+    batEl.style.color = "#555";
+    batEl.textContent = "🔋 電池：測定できません";
+    return;
+  }
+  batHistory.push(mv / 1000);
+  if (batHistory.length > 3) batHistory.shift();
+  const v = batHistory.reduce((a, b) => a + b, 0) / batHistory.length;
+  const pct = voltToPercent(v);
+
+  let mark = "🔋";
+  if (pct <= BAT_LOW) mark = "🪫⚠️";
+  batEl.textContent = mark + " 電池：" + pct + "%（" + v.toFixed(2) + "V）";
+  if (pct <= BAT_LOW) { batEl.style.color = "#d00000"; batEl.style.fontWeight = "bold"; }
+  else { batEl.style.color = ""; batEl.style.fontWeight = ""; }
+
+  const now = Date.now();
+  if (!batSpokenFirst) {
+    batSpokenFirst = true;
+    speak("電池、" + pct + "パーセント");
+  }
+  if (pct <= BAT_EMPTY) {
+    if (now - batEmptySpoken >= 60000) {
+      batEmptySpoken = now;
+      speak("電池がほとんどありません。充電してください");
+    }
+  } else if (pct <= BAT_LOW) {
+    if (!batLowSpoken) { batLowSpoken = true; speak("電池が少なくなりました"); }
+  } else if (pct >= BAT_LOW + 10) {
+    batLowSpoken = false;
+    batEmptySpoken = 0;
+  }
+}
 
 // スマホに覚えさせる（電源を切っても残る）
 function load(key, def) {
@@ -572,6 +637,11 @@ document.getElementById("copyBtn").addEventListener("click", async () => {
 //  チェッカーから届いた文字
 // =====================================================================
 function handleText(text) {
+  if (text.startsWith("BAT:")) {
+    const mv = parseInt(text.slice(4), 10);
+    if (!isNaN(mv)) updateBattery(mv);
+    return;
+  }
   if (text.startsWith("PHY:")) {
     const phy = parseInt(text.slice(4), 10);
     if (phy === 3 && currentPhy !== 3) speak("長距離モードになりました");
@@ -642,6 +712,7 @@ async function openGatt() {
 async function onDisconnected() {
   disconnectBtn.disabled = true;
   clearSignal();
+  clearBattery();
   lastLed = null;
   refreshButtons();
   if (manualDisconnect) {
