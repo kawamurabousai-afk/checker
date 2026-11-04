@@ -7,7 +7,7 @@
 <title>NEWひかり番</title>
 <style>
   :root{
-    --bg:#111; --panel:#1c1c1c; --off:#2a2a2a; --offText:#8a8a8a;
+    --bg:#111; --panel:#1c1c1c; --off:#2a2a2a; --offText:#d0d0d0;
     --red:#e01b24; --redText:#fff; --gray:#555; --grayText:#bbb; --line:#333;
   }
   *{box-sizing:border-box}
@@ -17,13 +17,14 @@
   header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
   h1{font-size:18px;margin:0;letter-spacing:.05em}
   #status{font-size:13px;color:#aaa}
-  #grid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:10px;min-height:0}
+  #grid{flex:1;display:grid;grid-template-columns:1fr;grid-template-rows:repeat(6,1fr);gap:8px;min-height:0}
   .tile{background:var(--off);border:2px solid var(--line);border-radius:12px;
     display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
     padding:8px;color:var(--offText);transition:background .15s}
-  .name{font-size:clamp(14px,4.4vw,22px);font-weight:700}
-  .state{font-size:clamp(18px,6vw,34px);font-weight:800;margin-top:6px}
-  .time{font-size:clamp(14px,4.4vw,22px);margin-top:4px;font-variant-numeric:tabular-nums;min-height:1.3em}
+  .name{font-size:clamp(24px,8.6vw,44px);font-weight:700}
+  .info{font-size:clamp(18px,5.8vw,30px);font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .tile:not(.on) .info{display:none}
+  .time{margin-left:.8em}
   .tile.on{background:var(--red);border-color:#ff6b6b;color:var(--redText);box-shadow:0 0 18px rgba(224,27,36,.6)}
   .tile.on.blink{animation:blink .5s steps(1) infinite}
   @keyframes blink{50%{background:var(--off);color:var(--offText);box-shadow:none}}
@@ -35,7 +36,7 @@
   #resetBtn{font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid #555;background:#222;color:#ccc}
   .tile{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
   .name{line-height:1.25;word-break:break-all}
-  .name.long{font-size:clamp(12px,3.6vw,18px)}
+  .name.long{font-size:clamp(20px,6.6vw,34px)}
   .tile.pressing{outline:3px solid #ffcc66}
   .hint{font-size:12px;color:#777;text-align:center;margin-top:6px}
   #modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:10}
@@ -112,7 +113,7 @@
   for (let i = 1; i <= N; i++) {
     const el = document.createElement("div");
     el.className = "tile";
-    el.innerHTML = `<div class="name"></div><div class="state">―</div><div class="time"></div>`;
+    el.innerHTML = `<div class="name"></div><div class="info"><span class="state"></span><span class="time"></span></div>`;
     grid.appendChild(el);
     tiles.push({el, nm: el.querySelector(".name"), st: el.querySelector(".state"), tm: el.querySelector(".time")});
   }
@@ -130,7 +131,7 @@
   const nameOf = i => (data.names && data.names["s" + (i + 1)]) || defName(i);
   function showNames() {
     tiles.forEach((t, i) => { const n = nameOf(i); if (t.nm.textContent !== n) t.nm.textContent = n;
-      t.nm.classList.toggle("long", n.length >= 7); });
+      t.nm.classList.toggle("long", n.length >= 10); });
   }
   async function saveNames(obj) {
     data.names = Object.assign({}, data.names || {}, obj);   // 先に画面だけ変える
@@ -282,7 +283,7 @@
       t.el.classList.toggle("on", on);
       const since = typeof s.t === "number" ? now - s.t : Infinity;
       t.el.classList.toggle("blink", on && since < BLINK_MS);
-      t.st.textContent = on ? "発報中" : "―";
+      t.st.textContent = on ? "発報中" : "";
       t.tm.textContent = on && isFinite(since) ? fmt(since) : "";
     }
   }
