@@ -121,14 +121,44 @@
   const defName = i => `センサー${i + 1}`;
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-  let names = load("nhbNames", []);
   let customs = load("nhbCustom", []);       // 自由に入力した名前（新しい順）
-  function showNames() { tiles.forEach((t, i) => { const n = names[i] || defName(i); t.nm.textContent = n; t.nm.classList.toggle("long", n.length >= 7); }); }
-  function setName(i, n) {
-    names[i] = (n && n.trim()) ? n.trim() : "";
-    save("nhbNames", names); showNames();
+
+  // 名前はFirebaseの names に保存（マクロドロイドも同じ名前を読む）
+  const nameOf = i => (data.names && data.names["s" + (i + 1)]) || defName(i);
+  function showNames() {
+    tiles.forEach((t, i) => { const n = nameOf(i); if (t.nm.textContent !== n) t.nm.textContent = n;
+      t.nm.classList.toggle("long", n.length >= 7); });
   }
-  showNames();
+  async function saveNames(obj) {
+    data.names = Object.assign({}, data.names || {}, obj);   // 先に画面だけ変える
+    showNames();
+    try {
+      const r = await fetch(`${DB}/${key}/names.json`, {method: "PATCH", body: JSON.stringify(obj)});
+      if (!r.ok) throw new Error(r.status);
+    } catch (e) {
+      statusEl.textContent = "⚠ 名前を保存できませんでした";
+    }
+  }
+  function setName(i, n) {
+    const v = (n && n.trim()) ? n.trim() : defName(i);
+    saveNames({["s" + (i + 1)]: v});
+  }
+  function allDefaults() { const o = {}; for (let i = 0; i < N; i++) o["s" + (i + 1)] = defName(i); return o; }
+
+  // はじめて開いた時：Firebaseに名前がなければ用意する（前の版でスマホに覚えた名前があれば引き継ぐ）
+  let namesChecked = false;
+  function checkNames() {
+    if (namesChecked) return; namesChecked = true;
+    const have = data.names || {};
+    const old = load("nhbNames", []);
+    const add = {};
+    for (let i = 0; i < N; i++) {
+      const k = "s" + (i + 1);
+      if (!have[k]) add[k] = old[i] || defName(i);
+    }
+    if (Object.keys(add).length) saveNames(add);
+    try { localStorage.removeItem("nhbNames"); } catch (e) {}
+  }
 
   // ───── 下から出る画面 ─────
   const modal = document.getElementById("modal"), sheet = document.getElementById("sheet");
@@ -164,7 +194,7 @@
     sheet.innerHTML = `
       <h2>名前を全部「センサー1〜6」に戻しますか？</h2>
       <div class="confirm"><button class="danger" id="yes">戻す</button><button id="no">やめる</button></div>`;
-    sheet.querySelector("#yes").onclick = () => { names = []; save("nhbNames", names); showNames(); closeModal(); };
+    sheet.querySelector("#yes").onclick = () => { saveNames(allDefaults()); closeModal(); };
     sheet.querySelector("#no").onclick = closeModal;
     modal.classList.add("show");
   };
@@ -216,6 +246,7 @@
   }
 
   function render() {
+    showNames();
     const now = Date.now() + offset;
     const lost = !streamOk || !lastHbLocal || (Date.now() - lastHbLocal > LOST_MS);
     document.body.classList.toggle("lost", lost);
@@ -243,6 +274,7 @@
       streamOk = true;
       const m = JSON.parse(ev.data);
       setPath(m.path, m.data);
+      if (m.path === "/") checkNames();
       noteHeartbeat(); render();
     });
     es.addEventListener("patch", ev => {
