@@ -241,8 +241,19 @@
     else o[parts[parts.length - 1]] = val;
   }
 
+  // 生きてるよ合図：値が「新しくなった時」だけ受け取ったことにする
+  // （ページを開いた時・つなぎ直した時に、古い合図を「今来た」と勘違いしないように）
+  let prevHb = null;
   function noteHeartbeat() {
-    if (typeof data.hb === "number") {
+    if (typeof data.hb !== "number" || data.hb === prevHb) return;
+    const first = prevHb === null;
+    prevHb = data.hb;
+    if (first) {
+      // 開いた時にあった合図：スマホの時計で「どれだけ前の合図か」を見る
+      const age = Math.max(0, Date.now() - data.hb);
+      lastHbLocal = Date.now() - age;
+      offset = 0;
+    } else {
       lastHbLocal = Date.now();
       offset = data.hb - lastHbLocal;
     }
