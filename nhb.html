@@ -21,7 +21,7 @@
   .tile{background:var(--off);border:2px solid var(--line);border-radius:12px;
     display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
     padding:8px;color:var(--offText);transition:background .15s}
-  .name{font-size:clamp(14px,4.2vw,22px);font-weight:700}
+  .name{font-size:clamp(14px,4.4vw,22px);font-weight:700}
   .state{font-size:clamp(18px,6vw,34px);font-weight:800;margin-top:6px}
   .time{font-size:clamp(14px,4.4vw,22px);margin-top:4px;font-variant-numeric:tabular-nums;min-height:1.3em}
   .tile.on{background:var(--red);border-color:#ff6b6b;color:var(--redText);box-shadow:0 0 18px rgba(224,27,36,.6)}
@@ -31,6 +31,30 @@
     box-shadow:none!important;animation:none!important}
   #lostMsg{display:none;margin-top:10px;text-align:center;font-size:15px;font-weight:700;color:#ffcc66}
   body.lost #lostMsg{display:block}
+  header .right{display:flex;align-items:center;gap:10px}
+  #resetBtn{font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid #555;background:#222;color:#ccc}
+  .tile{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+  .name{line-height:1.25;word-break:break-all}
+  .name.long{font-size:clamp(12px,3.6vw,18px)}
+  .tile.pressing{outline:3px solid #ffcc66}
+  .hint{font-size:12px;color:#777;text-align:center;margin-top:6px}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:10}
+  #modal.show{display:flex}
+  #sheet{background:#1e1e1e;width:100%;max-width:520px;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;
+    padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+  #sheet h2{font-size:18px;margin:0 0 12px}
+  .list{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .list button,.row button,.confirm button{font-size:16px;padding:12px 8px;border-radius:10px;border:1px solid #444;background:#2b2b2b;color:#eee}
+  .list button.custom{border-color:#8a6d1d}
+  .sub{font-size:13px;color:#999;margin:14px 0 6px}
+  .row{display:flex;gap:8px;margin-top:6px}
+  .row input{flex:1;min-width:0;font-size:17px;padding:10px;border-radius:10px;border:1px solid #555;background:#222;color:#eee}
+  .row button.ok{background:#e01b24;border-color:#e01b24;color:#fff}
+  .foot{display:flex;gap:8px;margin-top:14px}
+  .foot button{flex:1;font-size:16px;padding:12px;border-radius:10px;border:1px solid #444;background:#2b2b2b;color:#eee}
+  .confirm{display:flex;gap:8px;margin-top:12px}
+  .confirm button{flex:1}
+  .confirm button.danger{background:#e01b24;border-color:#e01b24;color:#fff}
   #setup{display:none;padding:20px;line-height:1.7}
   #setup input{width:100%;font-size:18px;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #555;background:#222;color:#eee}
   #setup button{font-size:18px;padding:10px 20px;border-radius:8px;border:0;background:#e01b24;color:#fff}
@@ -39,10 +63,13 @@
 <body>
 <header>
   <h1>NEWひかり番</h1>
-  <span id="status">接続中…</span>
+  <div class="right"><button id="resetBtn">名前を全部戻す</button><span id="status">接続中…</span></div>
 </header>
 <div id="grid"></div>
+<div class="hint">マスを長押しすると名前を変えられます</div>
 <div id="lostMsg">⚠ ESPからの連絡が途切れています（表示は古いかもしれません）</div>
+
+<div id="modal"><div id="sheet"></div></div>
 
 <div id="setup">
   合い言葉を入力してください。<br>
@@ -82,10 +109,78 @@
   for (let i = 1; i <= N; i++) {
     const el = document.createElement("div");
     el.className = "tile";
-    el.innerHTML = `<div class="name">センサー${i}</div><div class="state">―</div><div class="time"></div>`;
+    el.innerHTML = `<div class="name"></div><div class="state">―</div><div class="time"></div>`;
     grid.appendChild(el);
-    tiles.push({el, st: el.querySelector(".state"), tm: el.querySelector(".time")});
+    tiles.push({el, nm: el.querySelector(".name"), st: el.querySelector(".state"), tm: el.querySelector(".time")});
   }
+
+  // ───── 名前（このスマホに覚えておく） ─────
+  const PRESETS = ["消火栓ポンプ起動","消火栓ポンプ故障","SPポンプ起動","SPポンプ故障",
+    "消火水槽満水","消火水槽減水","補給水槽満水","補給水槽減水",
+    "呼水槽満水","呼水槽減水","自家発起動","自家発故障","発信機灯"];
+  const defName = i => `センサー${i + 1}`;
+  const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  let names = load("nhbNames", []);
+  let customs = load("nhbCustom", []);       // 自由に入力した名前（新しい順）
+  function showNames() { tiles.forEach((t, i) => { const n = names[i] || defName(i); t.nm.textContent = n; t.nm.classList.toggle("long", n.length >= 7); }); }
+  function setName(i, n) {
+    names[i] = (n && n.trim()) ? n.trim() : "";
+    save("nhbNames", names); showNames();
+  }
+  showNames();
+
+  // ───── 下から出る画面 ─────
+  const modal = document.getElementById("modal"), sheet = document.getElementById("sheet");
+  const esc = t => t.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  function closeModal() { modal.classList.remove("show"); sheet.innerHTML = ""; }
+  modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+
+  function openNamer(i) {
+    const list = [...customs, ...PRESETS.filter(p => !customs.includes(p))];
+    sheet.innerHTML = `
+      <h2>センサー${i + 1} の名前</h2>
+      <div class="list">${list.map(n =>
+        `<button data-n="${esc(n)}" class="${customs.includes(n) ? "custom" : ""}">${esc(n)}</button>`).join("")}</div>
+      <div class="sub">自由に入力</div>
+      <div class="row"><input id="freeName" maxlength="12" placeholder="例：屋上水槽"><button class="ok" id="freeOk">決定</button></div>
+      <div class="foot"><button id="backDef">センサー${i + 1} に戻す</button><button id="cancel">やめる</button></div>`;
+    sheet.querySelectorAll(".list button").forEach(b => b.onclick = () => { setName(i, b.dataset.n); closeModal(); });
+    sheet.querySelector("#freeOk").onclick = () => {
+      const v = sheet.querySelector("#freeName").value.trim();
+      if (!v) return;
+      if (!PRESETS.includes(v)) {
+        customs = [v, ...customs.filter(c => c !== v)].slice(0, 10);
+        save("nhbCustom", customs);
+      }
+      setName(i, v); closeModal();
+    };
+    sheet.querySelector("#backDef").onclick = () => { setName(i, ""); closeModal(); };
+    sheet.querySelector("#cancel").onclick = closeModal;
+    modal.classList.add("show");
+  }
+
+  document.getElementById("resetBtn").onclick = () => {
+    sheet.innerHTML = `
+      <h2>名前を全部「センサー1〜6」に戻しますか？</h2>
+      <div class="confirm"><button class="danger" id="yes">戻す</button><button id="no">やめる</button></div>`;
+    sheet.querySelector("#yes").onclick = () => { names = []; save("nhbNames", names); showNames(); closeModal(); };
+    sheet.querySelector("#no").onclick = closeModal;
+    modal.classList.add("show");
+  };
+
+  // ───── 長押し（0.6秒） ─────
+  tiles.forEach((t, i) => {
+    let timer = null, sx = 0, sy = 0;
+    const cancel = () => { clearTimeout(timer); timer = null; t.el.classList.remove("pressing"); };
+    t.el.addEventListener("pointerdown", e => {
+      sx = e.clientX; sy = e.clientY; t.el.classList.add("pressing");
+      timer = setTimeout(() => { cancel(); openNamer(i); }, 600);
+    });
+    t.el.addEventListener("pointermove", e => { if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 15) cancel(); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev => t.el.addEventListener(ev, cancel));
+    t.el.addEventListener("contextmenu", e => e.preventDefault());
+  });
 
   // 受け取ったデータ
   let data = {};
