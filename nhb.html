@@ -45,7 +45,10 @@
   #sheet h2{font-size:18px;margin:0 0 12px}
   .list{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .list button,.row button,.confirm button{font-size:16px;padding:12px 8px;border-radius:10px;border:1px solid #444;background:#2b2b2b;color:#eee}
-  .list button.custom{border-color:#8a6d1d}
+  .list button.custom{border-color:#8a6d1d;width:100%}
+  .cwrap{position:relative;display:flex}
+  .cwrap .del{position:absolute;top:-8px;right:-8px;width:30px;height:30px;padding:0;border-radius:50%;
+    border:2px solid #1e1e1e;background:#8a6d1d;color:#fff;font-size:16px;line-height:1;font-weight:700}
   .sub{font-size:13px;color:#999;margin:14px 0 6px}
   .row{display:flex;gap:8px;margin-top:6px}
   .row input{flex:1;min-width:0;font-size:17px;padding:10px;border-radius:10px;border:1px solid #555;background:#222;color:#eee}
@@ -170,12 +173,20 @@
     const list = [...customs, ...PRESETS.filter(p => !customs.includes(p))];
     sheet.innerHTML = `
       <h2>センサー${i + 1} の名前</h2>
-      <div class="list">${list.map(n =>
-        `<button data-n="${esc(n)}" class="${customs.includes(n) ? "custom" : ""}">${esc(n)}</button>`).join("")}</div>
+      <div class="list">${list.map(n => customs.includes(n)
+        ? `<div class="cwrap"><button data-n="${esc(n)}" class="custom">${esc(n)}</button><button class="del" data-d="${esc(n)}" aria-label="削除">×</button></div>`
+        : `<button data-n="${esc(n)}">${esc(n)}</button>`).join("")}</div>
+      ${customs.length ? '<div class="sub">自分で入れた名前（黄色）は、右上の × で消せます</div>' : ""}
       <div class="sub">自由に入力</div>
       <div class="row"><input id="freeName" maxlength="12" placeholder="例：屋上水槽"><button class="ok" id="freeOk">決定</button></div>
       <div class="foot"><button id="backDef">センサー${i + 1} に戻す</button><button id="cancel">やめる</button></div>`;
-    sheet.querySelectorAll(".list button").forEach(b => b.onclick = () => { setName(i, b.dataset.n); closeModal(); });
+    sheet.querySelectorAll(".list button[data-n]").forEach(b => b.onclick = () => { setName(i, b.dataset.n); closeModal(); });
+    sheet.querySelectorAll(".list button.del").forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      customs = customs.filter(c => c !== b.dataset.d);
+      save("nhbCustom", customs);
+      openNamer(i);                       // 一覧を出し直す
+    });
     sheet.querySelector("#freeOk").onclick = () => {
       const v = sheet.querySelector("#freeName").value.trim();
       if (!v) return;
