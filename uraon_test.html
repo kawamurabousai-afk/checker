@@ -39,6 +39,8 @@
   .sens button { font-size: 24px; padding: 14px 4px; margin: 0; background: #444; }
   .sens button.on { background: #2a7de1; }
   .warn { color: #ffcc00; font-size: 20px; }
+  canvas { width: 100%; height: 280px; background: #000; border-radius: 10px; display: block; margin-bottom: 6px; }
+  .legend { font-size: 18px; color: #ccc; margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -53,6 +55,10 @@
   <div class="meter"><div class="bar" id="bar"></div></div>
   <div class="num" id="num">--</div>
   <div class="sub" id="sub">低い音：-- ／ 高い音：--</div>
+
+  <div class="label">📊 スマホが聞いてる音</div>
+  <canvas id="cv"></canvas>
+  <div class="legend">赤い線＝裏音の場所（左1260・右1930）。赤い線のところに<b>とがった山</b>が立てば、裏音が届いています。<br>白＝今の音 ／ 水色＝直近2秒で一番大きかった音</div>
 
   <div class="label">感度</div>
   <div class="sens">
@@ -74,6 +80,8 @@ let ctx, analyser, stream, timer, wakeLock;
 let history = [];             // 直近の判定（1回0.1秒）
 let isOk = false;
 let lastHit = -999, tick = 0;
+let hold = null;
+const FMIN = 800, FMAX = 2400;
 
 const $ = id => document.getElementById(id);
 
@@ -104,7 +112,7 @@ $('startBtn').onclick = async () => {
     const st = stream.getAudioTracks()[0].getSettings();
     $('ns').textContent = 'スマホのノイズ消し：' + (st.noiseSuppression ? '⚠️ オンのまま' : 'オフ ✅');
   } catch (e) {}
-  history = []; tick = 0; lastHit = -999;
+  history = []; tick = 0; lastHit = -999; hold = null;
   timer = setInterval(check, 100);
   $('startBtn').textContent = '■ 止める';
   $('startBtn').classList.add('stop');
@@ -145,6 +153,7 @@ function check() {
   analyser.getFloatFrequencyData(data);
   const s1 = strength(data, F1), s2 = strength(data, F2);
   const s = Math.min(s1, s2);           // 2つそろって初めて強い
+  draw(data);
   history.push(s);
   if (history.length > WIN) history.shift();
   tick++;
@@ -168,6 +177,39 @@ function check() {
   }
   const ok = (tick - lastHit) <= HOLD;
   if (ok !== isOk) setJudge(ok);
+}
+
+// グラフを描く
+function draw(data) {
+  const cv = $('cv');
+  const W = cv.width = cv.clientWidth * 2, H = cv.height = cv.clientHeight * 2;
+  const g = cv.getContext('2d');
+  const binHz = ctx.sampleRate / analyser.fftSize;
+  const a = Math.floor(FMIN / binHz), b = Math.ceil(FMAX / binHz);
+  const seg = Array.from(data.slice(a, b + 1));
+  if (!hold || hold.length !== seg.length) hold = seg.slice();
+  for (let i = 0; i < seg.length; i++) hold[i] = Math.max(seg[i], hold[i] - 1.5);
+  let hi = Math.max(...hold), lo = Math.min(...seg);
+  hi += 3; lo = Math.max(lo, hi - 70);
+  const x = f => (f - FMIN) / (FMAX - FMIN) * W;
+  const y = v => H - (v - lo) / (hi - lo) * H;
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  [F1, F2].forEach(f => {
+    g.strokeStyle = '#ff3b3b'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(x(f), 0); g.lineTo(x(f), H); g.stroke();
+  });
+  const line = (arr, col, w) => {
+    g.strokeStyle = col; g.lineWidth = w; g.beginPath();
+    arr.forEach((v, i) => {
+      const f = (a + i) * binHz;
+      i ? g.lineTo(x(f), y(v)) : g.moveTo(x(f), y(v));
+    });
+    g.stroke();
+  };
+  line(hold, '#3fc8ff', 3);
+  line(seg, '#ffffff', 3);
+  g.fillStyle = '#ccc'; g.font = '28px sans-serif';
+  [1000, 1500, 2000].forEach(f => g.fillText(f + 'Hz', x(f) - 40, H - 8));
 }
 
 function setJudge(ok) {
