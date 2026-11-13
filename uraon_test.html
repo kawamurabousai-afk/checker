@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>裏音テスト</title>
+<title>裏音テスト（ポン版）</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -42,8 +42,8 @@
 </style>
 </head>
 <body>
-  <h1>🎤 裏音テスト</h1>
-  <div class="note">「裏音入り」の曲を流して、スピーカーにスマホを向けてください。</div>
+  <h1>🎤 裏音テスト（ポン版）</h1>
+  <div class="note">「ポン裏音」入りの曲を流して、スピーカーにスマホを向けてください。</div>
 
   <button id="startBtn">▶ 聞きはじめる</button>
 
@@ -61,15 +61,19 @@
     <button data-th="20">低</button>
   </div>
   <div class="note">※ 誤ってOKになる時は「低」、なかなかOKにならない時は「高」に。</div>
+  <div class="sub" id="ns"></div>
   <div class="warn" id="msg"></div>
 
 <script>
 const F1 = 1260, F2 = 1930;   // 裏音の高さ
-const HOLD = 1.5;             // 何秒続いたらOKにするか
+const WIN = 24;              // 2.4秒分を見る（0.1秒×24）
+const PERIOD = 8;            // ポンの間隔 0.8秒（0.1秒×8）
+const HOLD = 20;             // OKを2秒は保つ
 let threshold = 15;
 let ctx, analyser, stream, timer, wakeLock;
 let history = [];             // 直近の判定（1回0.1秒）
 let isOk = false;
+let lastHit = -999, tick = 0;
 
 const $ = id => document.getElementById(id);
 
@@ -93,10 +97,14 @@ $('startBtn').onclick = async () => {
   }
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   analyser = ctx.createAnalyser();
-  analyser.fftSize = 8192;
-  analyser.smoothingTimeConstant = 0.3;
+  analyser.fftSize = 4096;
+  analyser.smoothingTimeConstant = 0;
   ctx.createMediaStreamSource(stream).connect(analyser);
-  history = [];
+  try {
+    const st = stream.getAudioTracks()[0].getSettings();
+    $('ns').textContent = 'スマホのノイズ消し：' + (st.noiseSuppression ? '⚠️ オンのまま' : 'オフ ✅');
+  } catch (e) {}
+  history = []; tick = 0; lastHit = -999;
   timer = setInterval(check, 100);
   $('startBtn').textContent = '■ 止める';
   $('startBtn').classList.add('stop');
@@ -138,22 +146,28 @@ function check() {
   const s1 = strength(data, F1), s2 = strength(data, F2);
   const s = Math.min(s1, s2);           // 2つそろって初めて強い
   history.push(s);
-  const keep = Math.round(HOLD * 10);
-  if (history.length > keep) history.shift();
+  if (history.length > WIN) history.shift();
+  tick++;
 
-  // 表示（直近1秒のまんなかの値）
-  const last = history.slice(-10).slice().sort((a, b) => a - b);
-  const show = Math.max(0, last[Math.floor(last.length / 2)]);
+  // 表示：ポンが鳴っている時の強さ（強い方の値）
+  const sorted = history.slice().sort((a, b) => b - a);
+  const show = Math.max(0, sorted[Math.floor(sorted.length * 0.15)]);
   $('bar').style.width = Math.min(100, show / 50 * 100) + '%';
   $('num').textContent = Math.round(show);
   $('sub').textContent = '低い音：' + Math.max(0, Math.round(s1)) + ' ／ 高い音：' + Math.max(0, Math.round(s2));
 
-  // 判定：1.5秒のうち8割以上こえていたらOK
-  if (history.length >= keep) {
-    const okCount = history.filter(v => v >= threshold).length;
-    if (!isOk && okCount >= keep * 0.8) setJudge(true);
-    if (isOk && okCount < keep * 0.3) setJudge(false);
+  // 判定：「ポン、ポン」と0.8秒ごとのリズムで鳴っているか
+  if (history.length >= WIN) {
+    const h = history.map(v => v >= threshold);
+    const frac = h.filter(x => x).length / WIN;
+    let edges = 0, same = 0;
+    for (let i = 1; i < WIN; i++) if (h[i] && !h[i - 1]) edges++;
+    for (let i = PERIOD; i < WIN; i++) if (h[i] === h[i - PERIOD]) same++;
+    const rhythm = same / (WIN - PERIOD);
+    if (frac >= 0.2 && frac <= 0.6 && edges >= 2 && edges <= 4 && rhythm >= 0.8) lastHit = tick;
   }
+  const ok = (tick - lastHit) <= HOLD;
+  if (ok !== isOk) setJudge(ok);
 }
 
 function setJudge(ok) {
