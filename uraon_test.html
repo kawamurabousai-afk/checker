@@ -45,7 +45,7 @@
 </head>
 <body>
   <h1>🎤 裏音テスト（ポン版）</h1>
-  <div class="note">「ポン裏音」入りの曲を流して、スピーカーにスマホを向けてください。</div>
+  <div class="note">「目印」入りの曲を流して、スピーカーにスマホを向けてください。</div>
 
   <button id="startBtn">▶ 聞きはじめる</button>
 
@@ -58,7 +58,7 @@
 
   <div class="label">📊 スマホが聞いてる音</div>
   <canvas id="cv"></canvas>
-  <div class="legend">赤い線＝裏音の場所（左1260・右1930）。赤い線のところに<b>とがった山</b>が立てば、裏音が届いています。<br>白＝今の音 ／ 水色＝直近2秒で一番大きかった音</div>
+  <div class="legend">赤い線＝目印の音の場所（左1319・右1976）。赤い線のところに<b>とがった山</b>が立てば、目印の音が届いています。<br>白＝今の音 ／ 水色＝直近2秒で一番大きかった音</div>
 
   <div class="label">感度</div>
   <div class="sens">
@@ -71,7 +71,7 @@
   <div class="warn" id="msg"></div>
 
 <script>
-const F1 = 1260, F2 = 1930;   // 裏音の高さ
+const F1 = 1318.5, F2 = 1975.5;   // 目印の音の高さ（ミとシ）
 const WIN = 24;              // 2.4秒分を見る（0.1秒×24）
 const PERIOD = 8;            // ポンの間隔 0.8秒（0.1秒×8）
 const HOLD = 20;             // OKを2秒は保つ
