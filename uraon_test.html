@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>裏音テスト（ポン版）</title>
+<title>スピーカーテスト</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -40,11 +40,21 @@
   .sens button.on { background: #2a7de1; }
   .warn { color: #ffcc00; font-size: 20px; }
   canvas { width: 100%; height: 280px; background: #000; border-radius: 10px; display: block; margin-bottom: 6px; }
+  #att { text-align:center; font-size:40px; font-weight:bold; padding:22px 8px; border-radius:20px; border:4px solid #444; background:#222; margin-bottom:10px; line-height:1.3; }
+  #att.same { background:#0a3d6b; border-color:#4aa3ff; }
+  #att.up   { background:#7a4a00; border-color:#ffb020; }
+  #att.down { background:#7a0a0a; border-color:#ff5050; }
+  #att.none { color:#888; }
+  .attnum { font-size:22px; color:#ccc; text-align:center; margin-bottom:12px; }
+  .row2 { display:flex; gap:8px; margin-bottom:16px; }
+  .row2 button { margin:0; font-size:24px; padding:16px 4px; }
+  #refBtn { background:#e08a00; }
+  #clrBtn { background:#555; }
   .legend { font-size: 18px; color: #ccc; margin-bottom: 16px; }
 </style>
 </head>
 <body>
-  <h1>🎤 裏音テスト（ポン版）</h1>
+  <h1>🎤 スピーカーテスト</h1>
   <div class="note">「目印」入りの曲を流して、スピーカーにスマホを向けてください。</div>
 
   <button id="startBtn">▶ 聞きはじめる</button>
@@ -55,6 +65,18 @@
   <div class="meter"><div class="bar" id="bar"></div></div>
   <div class="num" id="num">--</div>
   <div class="sub" id="sub">低い音：-- ／ 高い音：--</div>
+
+  <h1 style="font-size:26px;margin-top:8px;">🔊 アッテネーター確認</h1>
+  <div class="note">本体（スマホ）とスピーカーの距離を変えずに使ってください。<br>①「基準を記録」を押す → ② アッテネーターを切り替える → ③ 変わったかを見る</div>
+  <div id="att" class="none">基準を記録してください</div>
+  <div class="attnum" id="attnum">今の音量：--</div>
+  <div class="row2">
+    <button id="refBtn">📌 基準を記録</button>
+    <button id="clrBtn">リセット</button>
+  </div>
+  <div class="label">📈 音量の流れ（30秒）</div>
+  <canvas id="lv"></canvas>
+  <div class="legend">黄色の線＝今の音量 ／ 点線＝基準。アッテネーターが効くと<b>段差</b>ができます。</div>
 
   <div class="label">📊 スマホが聞いてる音</div>
   <canvas id="cv"></canvas>
@@ -81,6 +103,10 @@ let history = [];             // 直近の判定（1回0.1秒）
 let isOk = false;
 let lastHit = -999, tick = 0;
 let hold = null;
+let lvHist = [];            // 音量の流れ（30秒分）
+let pkHist = [];            // 直近0.8秒の目印の音量
+let refLevel = null;        // 基準
+const SAME_DB = 2;          // これ以内なら「同じ」
 const FMIN = 800, FMAX = 2800;
 
 const $ = id => document.getElementById(id);
@@ -112,7 +138,7 @@ $('startBtn').onclick = async () => {
     const st = stream.getAudioTracks()[0].getSettings();
     $('ns').textContent = 'スマホのノイズ消し：' + (st.noiseSuppression ? '⚠️ オンのまま' : 'オフ ✅');
   } catch (e) {}
-  history = []; tick = 0; lastHit = -999; hold = null;
+  history = []; tick = 0; lastHit = -999; hold = null; pkHist = []; lvHist = [];
   timer = setInterval(check, 100);
   $('startBtn').textContent = '■ 止める';
   $('startBtn').classList.add('stop');
@@ -152,6 +178,9 @@ function check() {
   const data = new Float32Array(analyser.frequencyBinCount);
   analyser.getFloatFrequencyData(data);
   const st = FS.map(f => strength(data, f));
+  const binHz2 = ctx.sampleRate / analyser.fftSize;
+  const pks = FS.map(f => { const c = Math.round(f / binHz2); let p = -Infinity; for (let i = c - 2; i <= c + 2; i++) p = Math.max(p, data[i]); return p; });
+  const lvNow = 10 * Math.log10(pks.reduce((a, p) => a + Math.pow(10, p / 10), 0));
   const avg = st.reduce((a, b) => a + b, 0) / st.length;
   const s = Math.min(avg, Math.min(...st) + 8);   // 4つの平均（1つだけ大きい時は数えない）
   const s1 = Math.min(st[0], st[1]), s2 = Math.min(st[2], st[3]);
@@ -179,6 +208,70 @@ function check() {
   }
   const ok = (tick - lastHit) <= HOLD;
   if (ok !== isOk) setJudge(ok);
+  updateAtt(lvNow);
+}
+
+// ===== アッテネーター確認 =====
+let curLevel = null;
+function updateAtt(lvNow) {
+  pkHist.push(lvNow); if (pkHist.length > PERIOD) pkHist.shift();
+  curLevel = isOk ? Math.max(...pkHist) + 100 : null;   // 「チーン」の一番大きいところ
+  lvHist.push(curLevel); if (lvHist.length > 300) lvHist.shift();
+  const box = $('att');
+  if (curLevel === null) {
+    $('attnum').textContent = '今の音量：--（目印が聞こえていません）';
+    if (refLevel !== null) { box.className = 'none'; box.textContent = '目印が聞こえません'; }
+  } else {
+    $('attnum').textContent = '今の音量：' + curLevel.toFixed(0) + (refLevel !== null ? '　／　基準：' + refLevel.toFixed(0) : '');
+    if (refLevel !== null) {
+      const d = curLevel - refLevel, r = Math.round(Math.abs(d));
+      if (Math.abs(d) <= SAME_DB) { box.className = 'same'; box.textContent = '＝ 同じ'; }
+      else if (d > 0) { box.className = 'up';   box.innerHTML = '⬆ ＋' + r + '<br>大きくなった'; }
+      else            { box.className = 'down'; box.innerHTML = '⬇ −' + r + '<br>小さくなった'; }
+    }
+  }
+  drawLevel();
+}
+$('refBtn').onclick = () => {
+  if (curLevel === null) { $('msg').textContent = '⚠️ 目印が聞こえている時に押してください'; return; }
+  const v = lvHist.slice(-10).filter(x => x !== null);
+  refLevel = v.reduce((a, b) => a + b, 0) / v.length;   // 直近1秒の平均
+  $('msg').textContent = '';
+  if (navigator.vibrate) navigator.vibrate(100);
+};
+$('clrBtn').onclick = () => {
+  refLevel = null; lvHist = [];
+  $('att').className = 'none'; $('att').textContent = '基準を記録してください';
+};
+function drawLevel() {
+  const cv = $('lv');
+  const W = cv.width = cv.clientWidth * 2, H = cv.height = cv.clientHeight * 2;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  const vals = lvHist.filter(x => x !== null).concat(refLevel !== null ? [refLevel] : []);
+  if (!vals.length) return;
+  const mid = refLevel !== null ? refLevel : (Math.max(...vals) + Math.min(...vals)) / 2;
+  const span = Math.max(15, Math.max(...vals.map(v => Math.abs(v - mid))) + 3);
+  const y = v => H / 2 - (v - mid) / span * (H / 2 - 10);
+  const x = i => (i + 300 - lvHist.length) / 299 * W;
+  // 目盛り（5ごと）
+  g.strokeStyle = '#333'; g.lineWidth = 2; g.fillStyle = '#888'; g.font = '24px sans-serif';
+  for (let d = -30; d <= 30; d += 5) {
+    const yy = y(mid + d); if (yy < 0 || yy > H) continue;
+    g.beginPath(); g.moveTo(0, yy); g.lineTo(W, yy); g.stroke();
+    if (refLevel !== null && d !== 0) g.fillText((d > 0 ? '+' : '') + d, 6, yy - 4);
+  }
+  if (refLevel !== null) {
+    g.setLineDash([16, 12]); g.strokeStyle = '#fff'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(0, y(refLevel)); g.lineTo(W, y(refLevel)); g.stroke(); g.setLineDash([]);
+  }
+  g.strokeStyle = '#f2b600'; g.lineWidth = 6; g.beginPath();
+  let pen = false;
+  lvHist.forEach((v, i) => {
+    if (v === null) { pen = false; return; }
+    pen ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v)); pen = true;
+  });
+  g.stroke();
 }
 
 // グラフを描く
