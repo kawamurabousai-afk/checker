@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>音サーチ</title>
+<style>
+  :root { --bg:#111; --card:#1d1d1d; --line:#333; --txt:#f2f2f2; --sub:#aaa;
+          --ok:#ff3b3b; --go:#2ecc71; --blue:#3fa9ff; --warn:#ffcc00; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; font-size:20px; }
+  header { display:flex; align-items:center; gap:10px; padding:12px 14px; background:#000;
+           position:sticky; top:0; z-index:5; }
+  header h1 { font-size:26px; margin:0; flex:1; }
+  #bat { font-size:22px; font-weight:bold; }
+  #conn { font-size:20px; padding:10px 14px; border-radius:12px; border:none;
+          background:var(--blue); color:#fff; font-weight:bold; }
+  #conn.on { background:#444; }
+  .tabs { display:flex; background:#000; }
+  .tab { flex:1; padding:14px 0; text-align:center; font-size:22px; font-weight:bold;
+         color:var(--sub); border-bottom:5px solid transparent; }
+  .tab.on { color:#fff; border-bottom-color:var(--blue); }
+  .page { display:none; padding:14px; }
+  .page.on { display:block; }
+  .card { background:var(--card); border-radius:16px; padding:16px; margin-bottom:14px; }
+  .label { color:var(--sub); font-size:18px; margin-bottom:6px; }
+  #hear { text-align:center; font-size:46px; font-weight:bold; padding:30px 10px;
+          border-radius:18px; background:#2a2a2a; color:#888; }
+  #hear.ok { background:var(--ok); color:#fff; }
+  .meter { height:40px; background:#2a2a2a; border-radius:12px; position:relative; overflow:hidden; }
+  .meter .bar { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--go); transition:width .15s; }
+  .meter .th { position:absolute; top:-4px; bottom:-4px; width:4px; background:var(--warn); }
+  .num { font-size:44px; font-weight:bold; text-align:right; }
+  .row { display:flex; gap:10px; }
+  .btn { flex:1; padding:18px 0; font-size:24px; font-weight:bold; border-radius:14px;
+         border:3px solid #555; background:#2a2a2a; color:#fff; }
+  .btn.sel { border-color:var(--blue); background:#123a5c; }
+  .btn.main { background:var(--blue); border-color:var(--blue); }
+  .btn.gray { background:#444; border-color:#444; }
+  #diff { text-align:center; font-size:60px; line-height:1.2; font-weight:bold; padding:18px 0; }
+  #diffNote { text-align:center; font-size:20px; color:var(--sub); min-height:28px; }
+  canvas { width:100%; height:220px; background:#0b0b0b; border-radius:12px; display:block; }
+  .warn { color:var(--warn); font-size:20px; font-weight:bold; }
+  #msg { text-align:center; color:var(--sub); font-size:18px; padding:4px 10px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔊 音サーチ</h1>
+  <span id="bat">🔋--</span>
+  <button id="conn">つなぐ</button>
+</header>
+<div class="tabs">
+  <div class="tab on" data-p="p1">点検</div>
+  <div class="tab" data-p="p2">アッテネーター</div>
+</div>
+<div id="msg">「つなぐ」を押して OTO_SEARCH を選んでね</div>
+
+<!-- ===== 点検 ===== -->
+<div class="page on" id="p1">
+  <div class="card"><div id="hear">待っています…</div></div>
+  <div class="card">
+    <div class="label">目印の音の強さ（黄色の線をこえると「聞こえた」）</div>
+    <div class="meter"><div class="bar" id="bar"></div><div class="th" id="thLine"></div></div>
+    <div class="num" id="snum">--</div>
+  </div>
+  <div class="card">
+    <div class="label">感度</div>
+    <div class="row">
+      <button class="btn sens" data-th="10">高</button>
+      <button class="btn sens" data-th="15">中</button>
+      <button class="btn sens" data-th="20">低</button>
+    </div>
+    <div class="label" style="margin-top:8px">うるさい場所でまちがって反応する時は「中」「低」に</div>
+  </div>
+</div>
+
+<!-- ===== アッテネーター ===== -->
+<div class="page" id="p2">
+  <div class="card">
+    <div id="diff">--</div>
+    <div id="diffNote">「基準を記録」を押してね</div>
+  </div>
+  <div class="card">
+    <div class="row">
+      <button class="btn main" id="setRef">📌 基準を記録</button>
+      <button class="btn gray" id="resetRef">リセット</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">30秒の流れ（右が今）　点線＝基準</div>
+    <canvas id="graph" width="800" height="440"></canvas>
+  </div>
+  <div class="card label">
+    使い方：①アッテネーターを「最大」にして基準を記録 → ②つまみを回す → ③⬇小さくなった が出ればOK<br>
+    ⚠️ 赤い「聞こえた」が消えている時の数字は当てになりません
+  </div>
+</div>
+
+<script>
+const SERVICE = "6f1a0101-9c7d-4f6f-8a7e-000000000101";
+const NOTIFY  = "6f1a0102-9c7d-4f6f-8a7e-000000000102";
+const WRITE   = "6f1a0103-9c7d-4f6f-8a7e-000000000103";
+const $ = id => document.getElementById(id);
+let dev = null, wch = null, wakeLock = null;
+let S = 0, OK = 0, TH = 10, L = null, ref = null;
+const hist = [];               // [時刻ms, レベル, OK]
+const METER_MAX = 40;
+
+// --- タブ ---
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  document.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.id === t.dataset.p));
+});
+
+// --- つなぐ ---
+$("conn").onclick = async () => {
+  if (dev && dev.gatt.connected) { dev.gatt.disconnect(); return; }
+  if (!navigator.bluetooth) { $("msg").textContent = "このブラウザはBluetoothが使えません（AndroidのChromeで開いてね）"; return; }
+  try {
+    dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "OTO_SEARCH" }], optionalServices: [SERVICE] });
+    dev.addEventListener("gattserverdisconnected", onDisc);
+    await connect();
+  } catch (e) { $("msg").textContent = "つながりませんでした：" + e.message; }
+};
+async function connect() {
+  $("msg").textContent = "つないでいます…";
+  const srv = await dev.gatt.connect();
+  const sv = await srv.getPrimaryService(SERVICE);
+  const nc = await sv.getCharacteristic(NOTIFY);
+  wch = await sv.getCharacteristic(WRITE);
+  nc.addEventListener("characteristicvaluechanged", e => onMsg(new TextDecoder().decode(e.target.value)));
+  await nc.startNotifications();
+  $("conn").textContent = "切る"; $("conn").classList.add("on");
+  $("msg").textContent = "つながりました 👍";
+  try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+async function onDisc() {
+  $("conn").textContent = "つなぐ"; $("conn").classList.remove("on");
+  OK = 0; draw();
+  $("msg").textContent = "切れました。もう一度つないでいます…";
+  for (let i = 0; i < 3; i++) {
+    try { await new Promise(r => setTimeout(r, 1500)); await connect(); return; } catch (e) {}
+  }
+  $("msg").textContent = "切れました。「つなぐ」を押してね";
+}
+
+// --- ESPからのお知らせ ---
+function onMsg(m) {
+  if (m.startsWith("BAT:")) { showBat(parseInt(m.slice(4))); return; }
+  const g = k => { const r = m.match(new RegExp("(?:^|,)" + k + ":?(-?\\d+)")); return r ? parseInt(r[1]) : null; };
+  const s = g("S"), o = g("OK") ?? g("O"), t = g("TH") ?? g("T"), l = g("L");
+  if (s !== null) S = s;
+  if (o !== null) OK = o;
+  if (t !== null) TH = t;
+  if (l !== null) L = l / 10;
+  hist.push([Date.now(), L, OK]);
+  while (hist.length && Date.now() - hist[0][0] > 30000) hist.shift();
+  draw();
+}
+function showBat(mv) {
+  // リチウム電池の電圧 → だいたいの残り
+  const pts = [[3300,0],[3500,10],[3600,20],[3700,40],[3800,60],[3950,80],[4150,100]];
+  let p = 0;
+  for (let i = 1; i < pts.length; i++) if (mv <= pts[i][0]) { const [a,pa]=pts[i-1],[b,pb]=pts[i]; p = pa + (pb-pa)*Math.max(0,mv-a)/(b-a); break; } else p = 100;
+  p = Math.round(p / 5) * 5;
+  $("bat").textContent = (p <= 20 ? "🪫" : "🔋") + p + "%";
+  $("bat").style.color = p <= 20 ? "var(--warn)" : "";
+}
+
+// --- 感度 ---
+document.querySelectorAll(".sens").forEach(b => b.onclick = async () => {
+  if (!wch) return;
+  try { await wch.writeValue(new TextEncoder().encode("TH:" + b.dataset.th)); TH = +b.dataset.th; draw(); } catch (e) {}
+});
+
+// --- アッテネーター ---
+$("setRef").onclick = () => {
+  if (L === null) return;
+  // 直近2秒の「聞こえていた時」の平均を基準に
+  const now = Date.now(), v = hist.filter(h => now - h[0] < 2000 && h[2] && h[1] !== null).map(h => h[1]);
+  ref = v.length ? v.reduce((a, b) => a + b) / v.length : L;
+  draw();
+};
+$("resetRef").onclick = () => { ref = null; draw(); };
+
+// --- 表示 ---
+function draw() {
+  $("hear").textContent = OK ? "🔔 聞こえた！" : "待っています…";
+  $("hear").classList.toggle("ok", !!OK);
+  $("bar").style.width = Math.min(100, S / METER_MAX * 100) + "%";
+  $("thLine").style.left = Math.min(100, TH / METER_MAX * 100) + "%";
+  $("snum").textContent = S;
+  document.querySelectorAll(".sens").forEach(b => b.classList.toggle("sel", +b.dataset.th === TH));
+
+  const d = $("diff"), n = $("diffNote");
+  if (ref === null || L === null) { d.textContent = "--"; d.style.color = ""; n.textContent = "「基準を記録」を押してね"; }
+  else if (!OK) { d.textContent = "？"; d.style.color = "var(--sub)"; n.innerHTML = '<span class="warn">⚠️ 目印が聞こえていません</span>'; }
+  else {
+    const x = L - ref;
+    const w = t => '<br><span style="font-size:32px">' + t + '</span>';
+    if (Math.abs(x) <= 2) { d.innerHTML = "＝" + w("同じ"); d.style.color = "#fff"; }
+    else if (x > 0) { d.innerHTML = "⬆ ＋" + Math.round(x) + w("大きくなった"); d.style.color = "var(--warn)"; }
+    else { d.innerHTML = "⬇ −" + Math.round(-x) + w("小さくなった"); d.style.color = "var(--go)"; }
+    n.textContent = "基準との差（dB）";
+  }
+  drawGraph();
+}
+function drawGraph() {
+  const c = $("graph"), g = c.getContext("2d"), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const pts = hist.filter(h => h[1] !== null && h[2]);
+  if (!pts.length && ref === null) return;
+  const vals = pts.map(h => h[1]).concat(ref !== null ? [ref] : []);
+  let lo = Math.min(...vals) - 6, hi = Math.max(...vals) + 6;
+  if (hi - lo < 20) { const m = (hi + lo) / 2; lo = m - 10; hi = m + 10; }
+  const X = t => W - (Date.now() - t) / 30000 * W, Y = v => H - (v - lo) / (hi - lo) * H;
+  // 目盛り（5秒ごと）
+  g.strokeStyle = "#2a2a2a"; g.lineWidth = 2;
+  for (let s = 5; s < 30; s += 5) { const x = W - s / 30 * W; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  if (ref !== null) {
+    g.setLineDash([16, 12]); g.strokeStyle = "#fff"; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(0, Y(ref)); g.lineTo(W, Y(ref)); g.stroke(); g.setLineDash([]);
+  }
+  g.strokeStyle = "#3fa9ff"; g.lineWidth = 6; g.lineJoin = "round"; g.beginPath();
+  let prev = null;
+  for (const h of hist) {
+    if (h[1] === null || !h[2]) { prev = null; continue; }
+    const x = X(h[0]), y = Y(h[1]);
+    if (prev && h[0] - prev < 1000) g.lineTo(x, y); else g.moveTo(x, y);
+    prev = h[0];
+  }
+  g.stroke();
+}
+setInterval(drawGraph, 200);
+draw();
+</script>
+</body>
+</html>
