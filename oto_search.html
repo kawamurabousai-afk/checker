@@ -103,7 +103,7 @@ const SERVICE = "6f1a0101-9c7d-4f6f-8a7e-000000000101";
 const NOTIFY  = "6f1a0102-9c7d-4f6f-8a7e-000000000102";
 const WRITE   = "6f1a0103-9c7d-4f6f-8a7e-000000000103";
 const $ = id => document.getElementById(id);
-let dev = null, wch = null, wakeLock = null;
+let dev = null, wch = null, wakeLock = null, userCut = false;
 let S = 0, OK = 0, TH = 10, L = null, ref = null;
 const hist = [];               // [時刻ms, レベル, OK]
 const METER_MAX = 40;
@@ -116,7 +116,8 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
 
 // --- つなぐ ---
 $("conn").onclick = async () => {
-  if (dev && dev.gatt.connected) { dev.gatt.disconnect(); return; }
+  if (dev && dev.gatt.connected) { userCut = true; dev.gatt.disconnect(); return; }
+  userCut = false;
   if (!navigator.bluetooth) { $("msg").textContent = "このブラウザはBluetoothが使えません（AndroidのChromeで開いてね）"; return; }
   try {
     dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "OTO_SEARCH" }], optionalServices: [SERVICE] });
@@ -139,9 +140,11 @@ async function connect() {
 async function onDisc() {
   $("conn").textContent = "つなぐ"; $("conn").classList.remove("on");
   OK = 0; draw();
+  try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+  if (userCut) { $("msg").textContent = "切りました。「つなぐ」でまたつながります"; return; }
   $("msg").textContent = "切れました。もう一度つないでいます…";
   for (let i = 0; i < 3; i++) {
-    try { await new Promise(r => setTimeout(r, 1500)); await connect(); return; } catch (e) {}
+    try { await new Promise(r => setTimeout(r, 1500)); if (userCut) return; await connect(); return; } catch (e) {}
   }
   $("msg").textContent = "切れました。「つなぐ」を押してね";
 }
